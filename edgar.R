@@ -3,7 +3,7 @@ library(readr)
 library(stringr)
 library(xml2)
 
-FIRST.YEAR = 2016
+FIRST.YEAR = 2004  # Sarbanes-Oxley!
 LAST.YEAR = 2016
 INDEX.DIR = "indices"
 CACHE.DIR = "cache"
@@ -25,7 +25,6 @@ DownloadMasterIndex <- function() {
       
       dir.create(dir.path, recursive = TRUE)
       download.file(url, file.path, method="curl", quiet = TRUE)
-      untar(file.path)
     }
   }
 }
@@ -77,32 +76,46 @@ DownloadFiling <- function(path) {
 
 # Parse a Form 4 filing
 ParseForm4NonDerivativeSecurities <- function(path) {
+  print(paste("Parsing", path))
+  
   text <- read_file(path)
 
   i <- str_locate(text, fixed("<?xml"))[1]
   j <- str_locate(text, fixed("\n</XML>"))[1]
+  
+  if (is.na(i)) {
+    print(paste("Skipping", path, "(no XML)"))
+    return()
+  }
 
   text.xml <- str_sub(text, i, j - 1)
 
   xml <- read_xml(text.xml)
 
+  issuer <- xml %>%
+    xml_find_first(".//issuer/issuerName") %>%
+    xml_text()
+  
   transactions <- xml %>%
     xml_find_all(".//nonDerivativeTransaction")
 
   title <- transactions %>% xml_find_all(".//securityTitle/value") %>% xml_text()
   transaction.date <- transactions %>% xml_find_all(".//transactionDate/value") %>% xml_text()
   transaction.code <- transactions %>% xml_find_all(".//transactionCoding/transactionCode") %>% xml_text()
-  shares <- transactions %>% xml_find_all(".//transactionAmounts/transactionShares/value") %>% xml_text()
-  price.per.share <- transactions %>% xml_find_all(".//transactionAmounts/transactionPricePerShare/value") %>% xml_text()
+  shares <- as.numeric(transactions %>% xml_find_all(".//transactionAmounts/transactionShares/value") %>% xml_text())
+  price.per.share <- as.numeric(transactions %>% xml_find_all(".//transactionAmounts/transactionPricePerShare/value") %>% xml_text())
   acquisition.code <- transactions %>% xml_find_all(".//transactionAmounts/transactionAcquiredDisposedCode/value") %>% xml_text()
   ownership <- transactions %>% xml_find_all(".//ownershipNature/directOrIndirectOwnership/value") %>% xml_text()
 
   results <- data.frame(
+    file = rep(path, length(title)),
+    issuer = rep(issuer, length(title)),
     title,
     transaction.date,
     transaction.code,
     shares,
     price.per.share,
+    total.sale = shares * price.per.share,
     acquisition.code,
     ownership,
     stringsAsFactors = FALSE

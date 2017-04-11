@@ -8,12 +8,17 @@ source("edgar.R")
 DownloadMasterIndex()
 master.index <- ParseMasterIndex()
 
-# Bezos
-filings <- master.index %>%
-  filter(cik == 1018724, form.type == "4")
+# Amazon/Bezos: 1018724
+# Facebook/Zuckerberg: 1548760
+# Apple/Cook: 1214156
+# Google/Brin: 1295032
+# Google/Page: 1295231
 
-sapply(filings$filename, DownloadFiling)
+filings <- master.index %>%
+  filter(cik == 1295032, form.type == "4")
+
+invisible(sapply(filings$filename, DownloadFiling))
 
 results <- bind_rows(lapply(filings$filename, ParseForm4NonDerivativeSecurities))
 
-write_csv(results, "bezos.csv")
+write_csv(results, "brin.csv")
