@@ -112,6 +112,7 @@ ParseForm4NonDerivativeSecurities <- function(path) {
     issuer = rep(issuer, length(title)),
     title,
     transaction.date,
+    # Transaction code mapping: https://www.sec.gov/opa/column-descriptions.html
     transaction.code,
     shares,
     price.per.share,
