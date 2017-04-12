@@ -74,6 +74,21 @@ DownloadFiling <- function(path) {
   download.file(url, path, method = "curl", quiet = TRUE)
 }
 
+# In the given element find one entry for the given path and return it's text, or return NA
+FindOneOrNA <- function(root, xpath) {
+  el <- root %>%
+    xml_find_first(xpath)
+  
+  if (is.na(el)) {
+    return(NA)
+  }
+  
+  text <- el %>%
+    xml_text()
+  
+  return(text)
+}
+
 # Parse a Form 4 filing
 ParseForm4NonDerivativeSecurities <- function(path) {
   print(paste("Parsing", path))
@@ -99,14 +114,14 @@ ParseForm4NonDerivativeSecurities <- function(path) {
   transactions <- xml %>%
     xml_find_all(".//nonDerivativeTransaction")
 
-  title <- transactions %>% xml_find_all(".//securityTitle/value") %>% xml_text()
-  transaction.date <- transactions %>% xml_find_all(".//transactionDate/value") %>% xml_text()
-  transaction.code <- transactions %>% xml_find_all(".//transactionCoding/transactionCode") %>% xml_text()
-  shares <- as.numeric(transactions %>% xml_find_all(".//transactionAmounts/transactionShares/value") %>% xml_text())
-  price.per.share <- as.numeric(transactions %>% xml_find_all(".//transactionAmounts/transactionPricePerShare/value") %>% xml_text())
-  acquisition.code <- transactions %>% xml_find_all(".//transactionAmounts/transactionAcquiredDisposedCode/value") %>% xml_text()
-  ownership <- transactions %>% xml_find_all(".//ownershipNature/directOrIndirectOwnership/value") %>% xml_text()
-
+  title <- sapply(transactions, FindOneOrNA, ".//securityTitle/value")
+  transaction.date <- sapply(transactions, FindOneOrNA, ".//transactionDate/value")
+  transaction.code <- sapply(transactions, FindOneOrNA, ".//transactionCoding/transactionCode")
+  shares <- as.numeric(sapply(transactions, FindOneOrNA, ".//transactionAmounts/transactionShares/value"))
+  price.per.share <- as.numeric(sapply(transactions, FindOneOrNA, ".//transactionAmounts/transactionPricePerShare/value"))
+  acquisition.code <- sapply(transactions, FindOneOrNA, ".//transactionAmounts/transactionAcquiredDisposedCode/value")
+  ownership <- sapply(transactions, FindOneOrNA, ".//ownershipNature/directOrIndirectOwnership/value")
+  
   results <- data.frame(
     file = rep(path, length(title)),
     issuer = rep(issuer, length(title)),

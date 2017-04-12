@@ -13,9 +13,10 @@ master.index <- ParseMasterIndex()
 # Apple/Cook: 1214156
 # Google/Brin: 1295032
 # Google/Page: 1295231
+# Tesla/Musk: 1494730
 
 filings <- master.index %>%
-  filter(cik == 1295032, form.type == "4")
+  filter(cik == 1494730, form.type == "4")
 
 invisible(sapply(filings$filename, DownloadFiling))
 
