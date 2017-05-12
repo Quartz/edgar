@@ -16,10 +16,10 @@ master.index <- ParseMasterIndex()
 # Tesla/Musk: 1494730
 
 filings <- master.index %>%
-  filter(cik == 1494730, form.type == "4")
+  filter(form.type == "4")
 
 invisible(sapply(filings$filename, DownloadFiling))
 
-results <- bind_rows(lapply(filings$filename, ParseForm4NonDerivativeSecurities))
+results <- bind_rows(lapply(filings$filename, ParseForm4))
 
-write_csv(results, "brin.csv")
+write_csv(results, "everybody.csv")

@@ -89,8 +89,82 @@ FindOneOrNA <- function(root, xpath) {
   return(text)
 }
 
-# Parse a Form 4 filing
-ParseForm4NonDerivativeSecurities <- function(path) {
+# Simple wrapper that applies FindOneOrNA to all elements
+FindAll <- function(transactions, xpath) {
+  return(sapply(transactions, FindOneOrNA, xpath))
+}
+
+# Parse Form 4 XML for non-derivative transactions
+ParseForm4NonDerivativeTransactions <- function(xml) {
+  transactions <- xml %>%
+    xml_find_all(".//nonDerivativeTransaction")
+  
+  title <- FindAll(transactions, ".//securityTitle/value")
+  transaction.date <- FindAll(transactions, ".//transactionDate/value")
+  transaction.code <- FindAll(transactions, ".//transactionCoding/transactionCode")
+  shares <- as.numeric(FindAll(transactions, ".//transactionAmounts/transactionShares/value"))
+  price.per.share <- as.numeric(FindAll(transactions, ".//transactionAmounts/transactionPricePerShare/value"))
+  acquisition.code <- FindAll(transactions, ".//transactionAmounts/transactionAcquiredDisposedCode/value")
+  ownership <- FindAll(transactions, ".//ownershipNature/directOrIndirectOwnership/value")
+  
+  results <- data.frame(
+    title,
+    is.derivative = rep(FALSE, length(title)),
+    transaction.date,
+    # Transaction code mapping: https://www.sec.gov/opa/column-descriptions.html
+    transaction.code,
+    shares,
+    price.per.share,
+    total.sale = shares * price.per.share,
+    acquisition.code,
+    ownership,
+    underlying.securities = rep(NA, length(title)),
+    underlying.shares = rep(NA, length(title)),
+    exercise.price = rep(NA, length(title)),
+    stringsAsFactors = FALSE
+  )
+  
+  return(results)
+}
+
+# Parse Form 4 XML for derivative transactions
+ParseForm4DerivativeTransactions <- function(xml) {
+  transactions <- xml %>%
+    xml_find_all(".//derivativeTransaction")
+  
+  title <- FindAll(transactions, ".//securityTitle/value")
+  transaction.date <- FindAll(transactions, ".//transactionDate/value")
+  transaction.code <- FindAll(transactions, ".//transactionCoding/transactionCode")
+  shares <- as.numeric(FindAll(transactions, ".//transactionAmounts/transactionShares/value"))
+  price.per.share <- as.numeric(FindAll(transactions, ".//transactionAmounts/transactionPricePerShare/value"))
+  acquisition.code <- FindAll(transactions, ".//transactionAmounts/transactionAcquiredDisposedCode/value")
+  ownership <- FindAll(transactions, ".//ownershipNature/directOrIndirectOwnership/value")
+  underlying.securities <- FindAll(transactions, ".//underlyingSecurity/underlyingSecurityTitle/value")
+  underlying.shares <- FindAll(transactions, ".//underlyingSecurity/underlyingSecurityShares/value")
+  exercise.price <- FindAll(transactions, ".//conversionOrExercisePrice/value")
+  
+  results <- data.frame(
+    title,
+    is.derivative = rep(TRUE, length(title)),
+    transaction.date,
+    # Transaction code mapping: https://www.sec.gov/opa/column-descriptions.html
+    transaction.code,
+    shares,
+    price.per.share,
+    total.sale = shares * price.per.share,
+    acquisition.code,
+    ownership,
+    underlying.securities,
+    underlying.shares,
+    exercise.price,
+    stringsAsFactors = FALSE
+  )
+  
+  return(results)
+}
+
+# Parse a Form 4 filing for both derivative and non-derivative transactions
+ParseForm4 <- function(path) {
   print(paste("Parsing", path))
   
   text <- read_file(path)
@@ -106,36 +180,27 @@ ParseForm4NonDerivativeSecurities <- function(path) {
   text.xml <- str_sub(text, i, j - 1)
 
   xml <- read_xml(text.xml)
-
-  issuer <- xml %>%
-    xml_find_first(".//issuer/issuerName") %>%
-    xml_text()
   
-  transactions <- xml %>%
-    xml_find_all(".//nonDerivativeTransaction")
-
-  title <- sapply(transactions, FindOneOrNA, ".//securityTitle/value")
-  transaction.date <- sapply(transactions, FindOneOrNA, ".//transactionDate/value")
-  transaction.code <- sapply(transactions, FindOneOrNA, ".//transactionCoding/transactionCode")
-  shares <- as.numeric(sapply(transactions, FindOneOrNA, ".//transactionAmounts/transactionShares/value"))
-  price.per.share <- as.numeric(sapply(transactions, FindOneOrNA, ".//transactionAmounts/transactionPricePerShare/value"))
-  acquisition.code <- sapply(transactions, FindOneOrNA, ".//transactionAmounts/transactionAcquiredDisposedCode/value")
-  ownership <- sapply(transactions, FindOneOrNA, ".//ownershipNature/directOrIndirectOwnership/value")
+  issuer.name <- FindOneOrNA(xml, ".//issuer/issuerName")
+  issuer.cik <- FindOneOrNA(xml, ".//issuer/issuerCik")
+  owner.name <- FindOneOrNA(xml, ".//reportingOwner/reportingOwnerId/rptOwnerName")
+  owner.cik <- FindOneOrNA(xml, ".//reportingOwner/reportingOwnerId/rptOwnerCik")
   
-  results <- data.frame(
-    file = rep(path, length(title)),
-    issuer = rep(issuer, length(title)),
-    title,
-    transaction.date,
-    # Transaction code mapping: https://www.sec.gov/opa/column-descriptions.html
-    transaction.code,
-    shares,
-    price.per.share,
-    total.sale = shares * price.per.share,
-    acquisition.code,
-    ownership,
+  non.derivatives <- ParseForm4NonDerivativeTransactions(xml)
+  derivatives <- ParseForm4DerivativeTransactions(xml)
+  transactions <- rbind(non.derivatives, derivatives)
+  
+  identifiers <- data.frame(
+    file = rep(path, nrow(transactions)),
+    owner.name = rep(owner.name, nrow(transactions)),
+    owner.cik = rep(owner.cik, nrow(transactions)),
+    issuer.name = rep(issuer.name, nrow(transactions)),
+    issuer.cik = rep(issuer.cik, nrow(transactions)),
     stringsAsFactors = FALSE
   )
   
+  results <- cbind(identifiers, transactions) %>%
+    arrange(transaction.date)
+
   return(results)
 }
